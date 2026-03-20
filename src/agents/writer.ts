@@ -170,7 +170,8 @@ Respond with the same JSON format as before — the full revised draft.`;
       const extracted = this.tryParseJson(jsonMatch[0]);
       if (extracted) {
         // If content field is empty/short but there's text after the JSON, use the trailing text
-        if ((!extracted.content || extracted.content.length < 50) && cleaned.length > jsonMatch[0].length + 50) {
+        const contentStr = String(extracted.content ?? '');
+        if (contentStr.length < 50 && cleaned.length > jsonMatch[0].length + 50) {
           const trailing = cleaned.slice(cleaned.indexOf(jsonMatch[0]) + jsonMatch[0].length).trim();
           if (trailing.length > 50) {
             extracted.content = trailing;
