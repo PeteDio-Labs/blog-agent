@@ -100,8 +100,8 @@ src/
 ## Ollama Model: petedio-writer
 
 - **Modelfile**: `gitops/ansible/roles/ollama-models/files/petedio-writer.Modelfile`
-- **Base model**: `qwen-tools` (same as pete-bot)
-- **Parameters**: temperature 0.7, top_p 0.9, num_predict 4096
+- **Base model**: `qwen2.5:7b` (4.7GB, upgraded from qwen-tools 3B for better style adherence)
+- **Parameters**: temperature 0.8, top_p 0.92, top_k 50, num_predict 4096, repeat_penalty 1.15
 - **Deploy**: `ansible-playbook playbooks/ollama-models.yml` (or `-e ollama_force_recreate=true` to rebuild)
 - **Status**: Ollama-only — no Claude API dependency, no external API keys
 
