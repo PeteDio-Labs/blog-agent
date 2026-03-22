@@ -80,6 +80,26 @@ export const apiRequestDuration = new Histogram({
   registers: [register],
 });
 
+// SSE event listener metrics
+export const sseEventsReceived = new Counter({
+  name: 'blog_agent_sse_events_received_total',
+  help: 'Total SSE events received from MC Backend',
+  labelNames: ['source', 'type'],
+  registers: [register],
+});
+
+export const sseConnected = new Gauge({
+  name: 'blog_agent_sse_connected',
+  help: '1=connected to SSE stream, 0=disconnected',
+  registers: [register],
+});
+
+export const sseTriggeredPipelines = new Counter({
+  name: 'blog_agent_sse_triggered_pipelines_total',
+  help: 'Total pipeline runs triggered by SSE deploy events',
+  registers: [register],
+});
+
 export async function getMetrics(): Promise<string> {
   return register.metrics();
 }

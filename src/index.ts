@@ -10,6 +10,7 @@ import { ReviewAgent } from './agents/review.js';
 import { createLLMProvider } from './providers/index.js';
 import { PipelineOrchestrator } from './services/pipeline.js';
 import { Scheduler } from './services/scheduler.js';
+import { EventListener } from './services/eventListener.js';
 import { BlogApiClient } from './clients/blogApi.js';
 import { NotificationServiceClient } from './clients/notificationService.js';
 import { MCBackendClient } from './clients/mcBackend.js';
@@ -56,6 +57,9 @@ const pipeline = new PipelineOrchestrator(
 const scheduler = new Scheduler(pipeline);
 scheduler.registerWeeklyRecap();
 
+// Initialize event listener (SSE → deploy changelogs)
+const eventListener = new EventListener(MC_BACKEND_URL, pipeline);
+
 // Create Express app
 const app = createApp(pipeline, llmProvider);
 
@@ -63,6 +67,7 @@ const app = createApp(pipeline, llmProvider);
 app.listen(PORT, () => {
   appUp.set(1);
   scheduler.start();
+  eventListener.start();
 
   logger.raw('');
   logger.raw('═══════════════════════════════════════════════════════');
@@ -74,6 +79,7 @@ app.listen(PORT, () => {
   logger.raw(`  MC Backend: ${MC_BACKEND_URL}`);
   logger.raw(`  LLM: ${llmProvider.name}`);
   logger.raw(`  Scheduler: ${scheduler.getJobs().length} jobs`);
+  logger.raw(`  Event Listener: SSE → deploy changelogs (2m debounce)`);
   logger.raw('═══════════════════════════════════════════════════════');
   logger.raw('');
 });
