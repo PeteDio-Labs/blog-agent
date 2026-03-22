@@ -21,7 +21,7 @@ const PORT = parseInt(process.env.PORT || '3004', 10);
 
 const BLOG_API_URL = process.env.BLOG_API_URL || 'http://blog-api.blog-dev.svc.cluster.local:8080';
 const NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL || 'http://notification-service.mission-control.svc.cluster.local:3002';
-const MC_BACKEND_URL = process.env.MC_BACKEND_URL || 'http://mission-control-backend.mission-control.svc.cluster.local:3001';
+const MC_BACKEND_URL = process.env.MC_BACKEND_URL || 'http://mission-control-backend.mission-control.svc.cluster.local:3000';
 const BLOG_URL = process.env.BLOG_URL || 'http://192.168.50.241';
 
 let llmProvider;
