@@ -19,12 +19,37 @@ You MUST respond with a single JSON object. ALL blog content goes INSIDE the "co
 Example of CORRECT output:
 {"title":"Shipped the Blog Agent Tonight","slug":"shipped-blog-agent-tonight","content":"The blog-agent went live at 2am. Watched it roll out in ArgoCD — synced clean on the first try, both nodes healthy, 24 pods humming along.\\n\\nThe fact that this service wrote its own deploy changelog is the kind of recursive homelab nonsense I live for.\\n\\n## What's Next\\n\\nHooking up the weekly recap cron so this thing writes itself every Monday.","excerpt":"The blog-agent deployed clean and wrote its own changelog. Peak homelab recursion.","tags":["blog-agent","argocd","deploy"]}
 
+FACTUAL GROUNDING RULES:
+- The "TRIGGER FACTS" section is what this post is ABOUT. Write about those events and ONLY those events.
+- The "BACKGROUND CONTEXT" section is supporting data — use it for color (e.g., "all 6 ArgoCD apps healthy") but do NOT invent incidents from it.
+- If you see events in "RECENT ACTIVITY" that are unrelated to the trigger service/namespace, do NOT mention them.
+- NEVER invent problems that aren't in the data. If the deploy was clean, say it was clean.
+- NEVER report metric values you didn't receive. If no CPU/memory data is provided, don't mention CPU/memory.
+- NEVER dramatize or escalate. A routine deploy is a routine deploy, not a crisis.
+- When in doubt, be boring and accurate rather than dramatic and wrong.
+
+BAD example (fabricated incident from unrelated data):
+{"title":"...", "content":"The deploy caused CPU spikes to 4000% and memory alerts fired across the cluster..."}
+This is WRONG because the CPU data came from an unrelated monitoring event, not from this deploy.
+
+GOOD example (accurate, grounded):
+{"title":"...", "content":"blog-agent deployed clean to blog-dev. ArgoCD synced on first try, pod healthy within 30s. Nothing broke — exactly how a deploy should go."}
+
 Rules:
 - The ENTIRE response must be valid JSON — nothing before or after it
 - The "content" field must contain the FULL blog post as markdown with \\n for line breaks
 - Never leave "content" empty — that is where ALL the writing goes
 - Write in first person, casual but technical, with real opinions
 - Weave data into narrative prose — do not dump bullet lists of raw data`;
+
+/** Content-type-specific LLM temperature */
+const TEMPERATURE: Record<ContentType, number> = {
+  'deploy-changelog': 0.4, // factual, low creativity
+  'incident-postmortem': 0.4,
+  'docs-audit': 0.4,
+  'weekly-recap': 0.7, // narrative, moderate creativity
+  'how-to': 0.7,
+};
 
 export class WriterAgent {
   constructor(private llm: LLMProvider) {
@@ -34,8 +59,9 @@ export class WriterAgent {
   async write(context: ContextAgentOutput, topic?: string): Promise<WriterAgentOutput> {
     const start = Date.now();
     const style = CONTENT_STYLE[context.contentType];
+    const temperature = TEMPERATURE[context.contentType] ?? 0.7;
 
-    log.info(`Writing ${context.contentType} draft${topic ? ` — topic: "${topic}"` : ''}`);
+    log.info(`Writing ${context.contentType} draft${topic ? ` — topic: "${topic}"` : ''} (temp: ${temperature})`);
 
     const userPrompt = this.buildPrompt(context, style, topic);
 
@@ -44,7 +70,7 @@ export class WriterAgent {
         systemPrompt: SYSTEM_PROMPT,
         userPrompt,
         maxTokens: 4096,
-        temperature: 0.7,
+        temperature,
       });
 
       const draft = this.parseDraft(response.text, context.contentType);
@@ -72,9 +98,12 @@ export class WriterAgent {
 
   async revise(draft: BlogDraft, feedback: string, context: ContextAgentOutput): Promise<WriterAgentOutput> {
     const start = Date.now();
+    const temperature = TEMPERATURE[context.contentType] ?? 0.7;
     log.info(`Revising draft: "${draft.title}"`);
 
     const userPrompt = `You previously wrote the following blog draft. The review agent has provided feedback. Revise the draft accordingly.
+
+IMPORTANT: Fix accuracy issues FIRST. If the reviewer says something is fabricated or unverifiable, REMOVE it. Do not try to reword fabricated claims — delete them entirely.
 
 ## Original Draft
 Title: ${draft.title}
@@ -84,9 +113,10 @@ ${draft.content}
 ## Review Feedback
 ${feedback}
 
-## Original Context
-Content type: ${context.contentType}
-Cluster data timestamp: ${context.cluster.timestamp}
+## Trigger Facts (what this post is about)
+${context.triggerFacts.length > 0
+  ? context.triggerFacts.map(e => `- ${e.source}/${e.type}: ${e.message} [${e.affected_service ?? 'unknown'} in ${e.namespace ?? 'unknown'}]`).join('\n')
+  : 'No specific trigger — general content'}
 
 Respond with the same JSON format as before — the full revised draft.`;
 
@@ -95,7 +125,7 @@ Respond with the same JSON format as before — the full revised draft.`;
         systemPrompt: SYSTEM_PROMPT,
         userPrompt,
         maxTokens: 4096,
-        temperature: 0.7,
+        temperature,
       });
 
       const revised = this.parseDraft(response.text, context.contentType);
@@ -125,33 +155,52 @@ Respond with the same JSON format as before — the full revised draft.`;
     if (topic) parts.push(`Topic: ${topic}`);
     parts.push(`Tone: ${style.tone}. Format: ${style.format}.`);
     parts.push('');
-    parts.push('IMPORTANT: The data below is your SOURCE MATERIAL. Do NOT copy it as-is. Transform it into a narrative story. Write paragraphs, not bullet lists. Tell the reader what happened and why it matters.');
-    parts.push('');
-    parts.push('--- SOURCE DATA (do not copy verbatim) ---');
 
-    // Compact cluster data as JSON so the model treats it as raw data, not template
-    const sourceData: Record<string, unknown> = {
+    // Trigger facts — what this post is ABOUT
+    parts.push('--- TRIGGER FACTS (this is what you are writing about) ---');
+    if (context.triggerFacts.length > 0) {
+      for (const e of context.triggerFacts) {
+        parts.push(`- ${e.source}/${e.type}: ${e.message} [service: ${e.affected_service ?? 'unknown'}, namespace: ${e.namespace ?? 'unknown'}, severity: ${e.severity}]`);
+      }
+    } else {
+      parts.push('No specific trigger event — write based on the topic and background context.');
+    }
+    parts.push('--- END TRIGGER FACTS ---');
+    parts.push('');
+
+    // Background context — supporting data
+    parts.push('--- BACKGROUND CONTEXT (supporting data, NOT the main story) ---');
+    const background: Record<string, unknown> = {
       timestamp: context.cluster.timestamp,
       clusterHealth: context.cluster.clusterHealth,
     };
-
     if (context.cluster.argocdApps.length > 0) {
-      sourceData.argocdApps = context.cluster.argocdApps.map(a => `${a.name} (${a.namespace}): ${a.status}/${a.health}`);
+      background.argocdApps = context.cluster.argocdApps.map(a => `${a.name} (${a.namespace}): ${a.status}/${a.health}`);
     }
     if (context.cluster.recentDeploys.length > 0) {
-      sourceData.recentDeploys = context.cluster.recentDeploys.slice(0, 10).map(d => `${d.service} → ${d.namespace}: ${d.image}`);
+      background.recentDeploys = context.cluster.recentDeploys.slice(0, 10).map(d => `${d.service} → ${d.namespace}: ${d.image}`);
     }
+    parts.push(JSON.stringify(background, null, 2));
+    parts.push('--- END BACKGROUND CONTEXT ---');
+    parts.push('');
+
+    // Recent activity — optional color, clearly labeled
     if (context.cluster.recentEvents.length > 0) {
-      sourceData.recentEvents = context.cluster.recentEvents.slice(0, 15).map(e => `[${e.severity}] ${e.source}: ${e.message}`);
-    }
-    if (Object.keys(context.additionalContext).length > 0) {
-      sourceData.additionalContext = context.additionalContext;
+      parts.push('--- RECENT ACTIVITY (optional color — only mention if directly related to the trigger) ---');
+      for (const e of context.cluster.recentEvents.slice(0, 10)) {
+        parts.push(`- [${e.severity}] ${e.source}/${e.type}: ${e.message}`);
+      }
+      parts.push('--- END RECENT ACTIVITY ---');
+      parts.push('');
     }
 
-    parts.push(JSON.stringify(sourceData, null, 2));
-    parts.push('--- END SOURCE DATA ---');
-    parts.push('');
-    parts.push('Now write the blog post as a JSON object with title, slug, content (markdown string with \\n), excerpt, and tags. Remember: content must be narrative prose, not a data dump.');
+    if (Object.keys(context.additionalContext).length > 0) {
+      parts.push('Additional context: ' + JSON.stringify(context.additionalContext));
+      parts.push('');
+    }
+
+    parts.push('Now write the blog post as a JSON object with title, slug, content (markdown string with \\n), excerpt, and tags.');
+    parts.push('Remember: write ONLY about the trigger facts. Be accurate. Do not invent incidents.');
 
     return parts.join('\n');
   }

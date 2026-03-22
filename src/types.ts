@@ -79,6 +79,8 @@ export interface ClusterHealth {
 
 export interface ContextAgentOutput {
   contentType: ContentType;
+  /** The specific events that triggered this pipeline (empty for schedule/api triggers) */
+  triggerFacts: InfraEvent[];
   cluster: ClusterContext;
   additionalContext: Record<string, unknown>;
   gatheredAt: string;

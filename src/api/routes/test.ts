@@ -17,6 +17,9 @@ const log = logger.child('test-route');
 
 const MOCK_CONTEXT: ContextAgentOutput = {
   contentType: 'deploy-changelog',
+  triggerFacts: [
+    { id: 'test-1', source: 'kubernetes', type: 'deployment', severity: 'info', message: 'blog-agent deployed to blog-dev namespace', timestamp: new Date().toISOString() },
+  ],
   cluster: {
     argocdApps: [
       { name: 'blog-dev', namespace: 'blog-dev', status: 'Synced', health: 'Healthy', syncedAt: new Date().toISOString() },

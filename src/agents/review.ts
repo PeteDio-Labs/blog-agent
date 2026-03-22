@@ -11,7 +11,9 @@ import type { LLMProvider } from '../providers/llm.js';
 
 const log = logger.child('review-agent');
 
-const SYSTEM_PROMPT = `You are the PeteDio Labs blog reviewer — a quality gate for auto-generated content.
+const SYSTEM_PROMPT = `You are the PeteDio Labs blog reviewer — a strict quality gate for auto-generated content.
+
+ACCURACY IS THE HIGHEST PRIORITY. A well-written post with fabricated data is WORSE than a boring accurate one.
 
 Your job:
 1. Check factual accuracy against the provided cluster context data
@@ -19,10 +21,20 @@ Your job:
 3. Score readability and tone consistency with a personal homelab blog
 4. Check for completeness — does the post match the requested content type?
 
+Accuracy checks (MOST IMPORTANT):
+- Every claim in the draft must trace back to a specific data point in the context
+- If the draft mentions CPU/memory numbers, verify they appear in the context data
+- If the draft describes an incident or problem, verify the trigger facts support it
+- If the draft attributes a problem to the deploy, verify events are from the same service/namespace
+- If the draft contains ANY fabricated incidents, metrics, or claims not supported by the data, score accuracy as 0
+- A clean deploy described as problematic is a CRITICAL accuracy failure
+
 Scoring:
-- 80+ = approved, ready to publish as draft
-- 60-79 = needs minor revisions, provide specific suggestions
-- Below 60 = needs significant rework, provide detailed feedback
+- 90+ = approved, ready to publish as draft
+- 75-89 = minor issues, provide specific suggestions (NOT approved)
+- Below 75 = needs significant rework, provide detailed feedback
+
+IMPORTANT: If ANY feedback item has category "accuracy" and severity "error", the draft MUST NOT be approved regardless of score. Set approved=false.
 
 Output Format:
 Respond with valid JSON matching this structure:
@@ -40,7 +52,7 @@ Respond with valid JSON matching this structure:
 }
 
 Do NOT wrap the JSON in markdown code fences. Return raw JSON only.
-Be constructive but honest. This is a quality gate, not a rubber stamp.`;
+Be constructive but ruthless on accuracy. This is a quality gate, not a rubber stamp.`;
 
 export class ReviewAgent {
   constructor(private llm: LLMProvider) {
@@ -99,6 +111,26 @@ export class ReviewAgent {
     parts.push(draft.content);
     parts.push('');
 
+    // Trigger facts — what this post SHOULD be about
+    parts.push('## Trigger Facts (what caused this pipeline — the post should be about THIS)');
+    if (context.triggerFacts.length > 0) {
+      for (const e of context.triggerFacts) {
+        parts.push(`- ${e.source}/${e.type}: ${e.message} [${e.affected_service ?? 'unknown'} in ${e.namespace ?? 'unknown'}]`);
+      }
+    } else {
+      parts.push('No specific trigger — general content (schedule or API)');
+    }
+    parts.push('');
+
+    // Accuracy check questions
+    parts.push('## Accuracy Check Questions');
+    parts.push('Answer these while reviewing:');
+    parts.push('1. Does the draft accurately describe ONLY what happened in the trigger facts?');
+    parts.push('2. Does it attribute any problems or incidents that aren\'t supported by the data?');
+    parts.push('3. Does it mention metrics (CPU, memory, latency) that don\'t appear in the context?');
+    parts.push('4. If the deploy was clean, does the draft say it was clean (not dramatize it)?');
+    parts.push('');
+
     parts.push('## Cluster Context (ground truth for accuracy check)');
     parts.push(`Data gathered at: ${context.cluster.timestamp}`);
     parts.push('');
@@ -120,7 +152,7 @@ export class ReviewAgent {
     }
 
     if (context.cluster.recentEvents.length > 0) {
-      parts.push('### Recent Events');
+      parts.push('### Recent Events (filtered to trigger context)');
       for (const event of context.cluster.recentEvents.slice(0, 10)) {
         parts.push(`- [${event.severity}] ${event.source}/${event.type}: ${event.message}`);
       }
@@ -144,20 +176,33 @@ export class ReviewAgent {
         feedback: ReviewFeedback[];
       };
 
-      return {
-        approved: parsed.approved,
-        score: Math.min(100, Math.max(0, parsed.score)),
-        feedback: parsed.feedback ?? [],
-      };
+      const score = Math.min(100, Math.max(0, parsed.score));
+      const feedback = parsed.feedback ?? [];
+
+      // Hard rule: any accuracy error = automatic rejection
+      const hasAccuracyError = feedback.some(
+        f => f.category === 'accuracy' && f.severity === 'error'
+      );
+
+      // Raised threshold: 90+ to approve
+      const approved = !hasAccuracyError && score >= 90 && parsed.approved;
+
+      if (hasAccuracyError && parsed.approved) {
+        log.warn('Overriding LLM approval — accuracy error detected, rejecting draft');
+      } else if (score < 90 && parsed.approved) {
+        log.warn(`Overriding LLM approval — score ${score} below 90 threshold`);
+      }
+
+      return { approved, score, feedback };
     } catch (err) {
-      log.warn('Failed to parse review output as JSON, defaulting to approved with warning');
+      log.warn('Failed to parse review output as JSON, defaulting to NOT approved');
       return {
-        approved: true,
-        score: 70,
+        approved: false,
+        score: 50,
         feedback: [{
           category: 'completeness',
           severity: 'warning',
-          message: 'Review agent output could not be parsed — auto-approved with reduced confidence',
+          message: 'Review agent output could not be parsed — not approved, requires manual review',
         }],
       };
     }
