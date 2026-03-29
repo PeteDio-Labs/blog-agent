@@ -14,6 +14,7 @@ import { EventListener } from './services/eventListener.js';
 import { BlogApiClient } from './clients/blogApi.js';
 import { NotificationServiceClient } from './clients/notificationService.js';
 import { MCBackendClient } from './clients/mcBackend.js';
+import { RagClient } from './clients/ragClient.js';
 import { appUp } from './metrics/index.js';
 import { logger } from './utils/logger.js';
 
@@ -37,9 +38,10 @@ try {
 const blogApi = new BlogApiClient(BLOG_API_URL);
 const notifications = new NotificationServiceClient(NOTIFICATION_SERVICE_URL);
 const mcBackend = new MCBackendClient(MC_BACKEND_URL);
+const ragClient = new RagClient(BLOG_API_URL);
 
 // Initialize agents
-const contextAgent = new ContextAgent(mcBackend, notifications);
+const contextAgent = new ContextAgent(mcBackend, notifications, ragClient);
 const writerAgent = new WriterAgent(llmProvider);
 const reviewAgent = new ReviewAgent(llmProvider);
 

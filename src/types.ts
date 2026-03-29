@@ -72,12 +72,21 @@ export interface ClusterHealth {
   podsNotReady: number;
 }
 
+export interface HistoricalChunk {
+  sourceRef: string;
+  sourceType: string;
+  chunkText: string;
+  similarity: number;
+}
+
 export interface ContextAgentOutput {
   contentType: ContentType;
   /** The specific events that triggered this pipeline (empty for schedule/api triggers) */
   triggerFacts: InfraEvent[];
   cluster: ClusterContext;
   additionalContext: Record<string, unknown>;
+  /** Semantically relevant past posts/sessions retrieved via RAG */
+  historicalContext: HistoricalChunk[];
   gatheredAt: string;
 }
 

@@ -35,6 +35,7 @@ const MOCK_CONTEXT: ContextAgentOutput = {
     timestamp: new Date().toISOString(),
   },
   additionalContext: { test: true },
+  historicalContext: [],
   gatheredAt: new Date().toISOString(),
 };
 

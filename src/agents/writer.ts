@@ -196,6 +196,16 @@ Respond with the same JSON format as before — the full revised draft.`;
       parts.push('');
     }
 
+    // Historical context — semantically relevant past posts/sessions from RAG
+    if (context.historicalContext && context.historicalContext.length > 0) {
+      parts.push('--- HISTORICAL CONTEXT (past posts about this topic — for continuity only, do NOT copy) ---');
+      for (const chunk of context.historicalContext) {
+        parts.push(`[${chunk.sourceRef}] ${chunk.chunkText.slice(0, 400).replace(/\n/g, ' ')}`);
+      }
+      parts.push('--- END HISTORICAL CONTEXT ---');
+      parts.push('');
+    }
+
     // Project documentation context (injected by MCP docs-context server)
     if (context.additionalContext.projectDocs) {
       const docs = context.additionalContext.projectDocs;

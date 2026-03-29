@@ -12,7 +12,8 @@ import { logger } from '../utils/logger.js';
 import { agentCallsTotal, agentDuration } from '../metrics/index.js';
 import type { MCBackendClient } from '../clients/mcBackend.js';
 import type { NotificationServiceClient } from '../clients/notificationService.js';
-import type { ContentType, ContextAgentOutput, DeployInfo, InfraEvent } from '../types.js';
+import type { RagClient } from '../clients/ragClient.js';
+import type { ContentType, ContextAgentOutput, DeployInfo, HistoricalChunk, InfraEvent } from '../types.js';
 
 const log = logger.child('context-agent');
 
@@ -29,6 +30,7 @@ export class ContextAgent {
   constructor(
     private mcBackend: MCBackendClient,
     private notifications: NotificationServiceClient,
+    private ragClient?: RagClient,
   ) {}
 
   async gather(contentType: ContentType, additionalContext: Record<string, unknown> = {}): Promise<ContextAgentOutput> {
@@ -62,6 +64,24 @@ export class ContextAgent {
       const recentEvents = this.filterByRelevance(cleanEvents, contentType, triggerEvents);
       const recentDeploys = this.extractDeploys(recentEvents);
 
+      // RAG retrieval — query for semantically relevant past posts/sessions
+      let historicalContext: HistoricalChunk[] = [];
+      if (this.ragClient) {
+        const ragQuery = this.buildRagQuery(contentType, triggerEvents, additionalContext);
+        try {
+          const chunks = await this.ragClient.query({ query: ragQuery, topK: 5, sourceTypes: ['post', 'session'] });
+          historicalContext = chunks.map(c => ({
+            sourceRef: c.sourceRef,
+            sourceType: c.sourceType,
+            chunkText: c.chunkText,
+            similarity: c.similarity,
+          }));
+          log.info(`RAG retrieved ${historicalContext.length} historical chunks for query: "${ragQuery.slice(0, 80)}"`);
+        } catch (ragErr) {
+          log.warn(`RAG query failed, continuing without historical context: ${ragErr instanceof Error ? ragErr.message : String(ragErr)}`);
+        }
+      }
+
       const output: ContextAgentOutput = {
         contentType,
         triggerFacts: triggerEvents,
@@ -73,6 +93,7 @@ export class ContextAgent {
           timestamp: new Date().toISOString(),
         },
         additionalContext: this.cleanAdditionalContext(additionalContext),
+        historicalContext,
         gatheredAt: new Date().toISOString(),
       };
 
@@ -151,6 +172,19 @@ export class ContextAgent {
 
     log.info(`Relevance filter: ${filtered.length}/${events.length} events match trigger context`);
     return filtered;
+  }
+
+  /** Build a RAG query string from trigger events and content type */
+  private buildRagQuery(contentType: ContentType, triggerEvents: InfraEvent[], additionalContext: Record<string, unknown>): string {
+    if (triggerEvents.length > 0) {
+      const parts = triggerEvents.map(e =>
+        [e.source, e.type, e.affected_service, e.namespace, e.message].filter(Boolean).join(' ')
+      );
+      return parts.join(' | ');
+    }
+    // For schedule/API triggers, use content type + any topic from additionalContext
+    const topic = (additionalContext.topic as string | undefined) ?? '';
+    return `${contentType} ${topic}`.trim();
   }
 
   /** Remove triggerEvents from additionalContext (it's now a top-level field) */
