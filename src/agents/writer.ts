@@ -172,8 +172,10 @@ Respond with the same JSON format as before — the full revised draft.`;
     parts.push('--- BACKGROUND CONTEXT (supporting data, NOT the main story) ---');
     const background: Record<string, unknown> = {
       timestamp: context.cluster.timestamp,
-      clusterHealth: context.cluster.clusterHealth,
     };
+    if (context.cluster.clusterHealth) {
+      background.clusterHealth = context.cluster.clusterHealth;
+    }
     if (context.cluster.argocdApps.length > 0) {
       background.argocdApps = context.cluster.argocdApps.map(a => `${a.name} (${a.namespace}): ${a.status}/${a.health}`);
     }
@@ -194,8 +196,28 @@ Respond with the same JSON format as before — the full revised draft.`;
       parts.push('');
     }
 
-    if (Object.keys(context.additionalContext).length > 0) {
-      parts.push('Additional context: ' + JSON.stringify(context.additionalContext));
+    // Project documentation context (injected by MCP docs-context server)
+    if (context.additionalContext.projectDocs) {
+      const docs = context.additionalContext.projectDocs;
+      if (typeof docs === 'string') {
+        // Pre-formatted readable text from MCP server
+        parts.push('--- PROJECT CONTEXT (what happened this week — use this for narrative) ---');
+        parts.push(docs);
+        parts.push('--- END PROJECT CONTEXT ---');
+      } else {
+        // Structured object fallback
+        parts.push('--- PROJECT CONTEXT ---');
+        parts.push(JSON.stringify(docs, null, 2));
+        parts.push('--- END PROJECT CONTEXT ---');
+      }
+      parts.push('');
+    }
+
+    // Other additional context (generic fallback)
+    const otherContext = { ...context.additionalContext };
+    delete otherContext.projectDocs;
+    if (Object.keys(otherContext).length > 0) {
+      parts.push('Additional context: ' + JSON.stringify(otherContext));
       parts.push('');
     }
 
@@ -272,10 +294,26 @@ Respond with the same JSON format as before — the full revised draft.`;
   }
 
   private jsonToDraft(parsed: Record<string, unknown>, contentType: ContentType): BlogDraft {
+    let content = String(parsed.content ?? '');
+
+    // Fix double-wrapped JSON: LLM sometimes returns the entire JSON object as the content string
+    if (content.trimStart().startsWith('{')) {
+      const inner = this.tryParseJson(content);
+      if (inner && typeof inner.content === 'string' && inner.content.length > 0) {
+        log.info('Unwrapped double-wrapped JSON in content field');
+        content = inner.content;
+        // Also pull inner fields if outer ones are missing/generic
+        if (!parsed.title && inner.title) parsed.title = inner.title;
+        if (!parsed.slug && inner.slug) parsed.slug = inner.slug;
+        if (!parsed.excerpt && inner.excerpt) parsed.excerpt = inner.excerpt;
+        if (!parsed.tags && inner.tags) parsed.tags = inner.tags;
+      }
+    }
+
     return {
       title: String(parsed.title ?? `Draft — ${contentType}`),
       slug: String(parsed.slug ?? `draft-${Date.now()}`),
-      content: String(parsed.content ?? ''),
+      content,
       excerpt: String(parsed.excerpt ?? '').slice(0, 200),
       tags: Array.isArray(parsed.tags) ? parsed.tags.map(String) : [contentType],
       contentType,

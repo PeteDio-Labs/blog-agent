@@ -3,6 +3,7 @@
  * Interacts with the Spring Boot blog-api admin endpoints for draft CRUD.
  */
 
+import { fetchWithRetry } from '@petedio/shared';
 import { logger } from '../utils/logger.js';
 import type { BlogPostRequest, BlogPostResponse } from '../types.js';
 
@@ -17,11 +18,11 @@ export class BlogApiClient {
 
   async createDraft(post: BlogPostRequest): Promise<BlogPostResponse> {
     log.info(`Creating draft: "${post.title}"`);
-    const res = await fetch(`${this.baseUrl}/api/v1/admin/posts`, {
+    const res = await fetchWithRetry(`${this.baseUrl}/api/v1/admin/posts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(post),
-    });
+    }, { onRetry: (n, e) => log.warn(`POST /admin/posts retry ${n}: ${e instanceof Error ? e.message : e}`) });
 
     if (!res.ok) {
       const body = await res.text();
@@ -33,7 +34,7 @@ export class BlogApiClient {
 
   async updatePost(id: number, update: Partial<BlogPostRequest>): Promise<BlogPostResponse> {
     log.info(`Updating post ${id}`);
-    const res = await fetch(`${this.baseUrl}/api/v1/admin/posts/${id}`, {
+    const res = await fetchWithRetry(`${this.baseUrl}/api/v1/admin/posts/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(update),
@@ -48,7 +49,7 @@ export class BlogApiClient {
   }
 
   async getPost(id: number): Promise<BlogPostResponse> {
-    const res = await fetch(`${this.baseUrl}/api/v1/admin/posts/${id}`);
+    const res = await fetchWithRetry(`${this.baseUrl}/api/v1/admin/posts/${id}`, {});
 
     if (!res.ok) {
       const body = await res.text();
@@ -65,7 +66,7 @@ export class BlogApiClient {
       size: String(size),
     });
 
-    const res = await fetch(`${this.baseUrl}/api/v1/admin/posts?${params}`);
+    const res = await fetchWithRetry(`${this.baseUrl}/api/v1/admin/posts?${params}`, {});
 
     if (!res.ok) {
       const body = await res.text();

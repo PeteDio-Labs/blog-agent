@@ -6,6 +6,7 @@
  * a single changelog generation.
  */
 
+import { SseListener } from '@petedio/shared';
 import { logger } from '../utils/logger.js';
 import type { PipelineOrchestrator } from './pipeline.js';
 import type { InfraEvent } from '../types.js';
@@ -32,96 +33,50 @@ export class EventListener {
   private debounceMs: number;
   private pendingEvents: InfraEvent[] = [];
   private debounceTimer?: ReturnType<typeof setTimeout>;
-  private retryDelay = 1000;
-  private stopped = false;
+  private sse: SseListener;
 
   constructor(
-    private mcBackendUrl: string,
+    mcBackendUrl: string,
     private pipeline: PipelineOrchestrator,
     options?: EventListenerOptions,
   ) {
     this.debounceMs = options?.debounceMs ?? DEFAULT_DEBOUNCE_MS;
+
+    this.sse = new SseListener(`${mcBackendUrl}/api/v1/events/stream`, {
+      onConnect: () => {
+        sseConnected.set(1);
+        log.info('Connected to SSE stream');
+      },
+      onDisconnect: () => {
+        sseConnected.set(0);
+      },
+      onError: (err) => {
+        log.error(`SSE connection error: ${err instanceof Error ? err.message : err}`);
+      },
+      onEvent: (data) => {
+        if ((data as { type?: string }).type === 'connected') return;
+        const event = data as InfraEvent;
+        sseEventsReceived.inc({
+          source: event.source ?? 'unknown',
+          type: event.type ?? 'unknown',
+        });
+        this.handleEvent(event);
+      },
+    });
   }
 
   start(): void {
-    this.stopped = false;
-    this.connect();
+    this.sse.start();
     log.info(`Event listener started — debounce: ${this.debounceMs / 1000}s`);
   }
 
   stop(): void {
-    this.stopped = true;
+    this.sse.stop();
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
       this.debounceTimer = undefined;
     }
-    sseConnected.set(0);
     log.info('Event listener stopped');
-  }
-
-  private async connect(): Promise<void> {
-    if (this.stopped) return;
-
-    const streamUrl = `${this.mcBackendUrl}/api/v1/events/stream`;
-    log.info(`Connecting to ${streamUrl}`);
-
-    try {
-      const response = await fetch(streamUrl, {
-        headers: { Accept: 'text/event-stream' },
-      });
-
-      if (!response.ok || !response.body) {
-        throw new Error(`SSE connection failed: ${response.status}`);
-      }
-
-      sseConnected.set(1);
-      this.retryDelay = 1000;
-      log.info('Connected to SSE stream');
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (!this.stopped) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-
-          try {
-            const data = JSON.parse(line.slice(6));
-            if (data.type === 'connected') continue;
-
-            const event = data as InfraEvent;
-            sseEventsReceived.inc({
-              source: event.source ?? 'unknown',
-              type: event.type ?? 'unknown',
-            });
-
-            this.handleEvent(event);
-          } catch {
-            // Ignore malformed SSE data
-          }
-        }
-      }
-
-      sseConnected.set(0);
-      log.warn('SSE stream ended, reconnecting...');
-    } catch (err) {
-      sseConnected.set(0);
-      log.error(`Connection error: ${err instanceof Error ? err.message : err}`);
-    }
-
-    if (!this.stopped) {
-      log.info(`Reconnecting in ${this.retryDelay / 1000}s...`);
-      setTimeout(() => this.connect(), this.retryDelay);
-      this.retryDelay = Math.min(this.retryDelay * 2, 30_000);
-    }
   }
 
   private handleEvent(event: InfraEvent): void {
@@ -136,10 +91,7 @@ export class EventListener {
 
     this.pendingEvents.push(event);
 
-    // Reset debounce timer — wait for more deploys to batch together
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-    }
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
 
     this.debounceTimer = setTimeout(() => {
       this.triggerPipeline();
@@ -165,9 +117,7 @@ export class EventListener {
     sseTriggeredPipelines.inc();
 
     this.pipeline
-      .run('deploy-changelog', 'event', topic, {
-        triggerEvents: events,
-      })
+      .run('deploy-changelog', 'event', topic, { triggerEvents: events })
       .then(run => {
         if (run.status === 'completed') {
           log.info(`Event-triggered pipeline completed — "${run.draft?.title}" (post ${run.blogPostId})`);

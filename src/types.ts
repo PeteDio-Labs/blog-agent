@@ -5,6 +5,9 @@
 
 import { z } from 'zod';
 
+// Shared types — re-exported so internal code can import from one place
+export type { InfraEvent, InfraEventInput, EventSource, EventType, Severity, BlogPostRequest, BlogPostResponse } from '@petedio/shared';
+
 // ─── Content Types ───────────────────────────────────────────────
 
 export const ContentType = z.enum([
@@ -41,7 +44,7 @@ export interface ClusterContext {
   argocdApps: ArgoApp[];
   recentEvents: InfraEvent[];
   recentDeploys: DeployInfo[];
-  clusterHealth: ClusterHealth;
+  clusterHealth: ClusterHealth | null;
   timestamp: string;
 }
 
@@ -53,16 +56,7 @@ export interface ArgoApp {
   syncedAt: string;
 }
 
-export interface InfraEvent {
-  id: string;
-  source: string;
-  type: string;
-  severity: string;
-  message: string;
-  namespace?: string;
-  affected_service?: string;
-  timestamp: string;
-}
+// InfraEvent is re-exported from @petedio/shared above
 
 export interface DeployInfo {
   service: string;
@@ -143,30 +137,8 @@ export interface PipelineRun {
   totalTokens: { input: number; output: number };
 }
 
-// ─── Blog API Types ──────────────────────────────────────────────
-
-export interface BlogPostRequest {
-  title: string;
-  content: string;
-  excerpt: string;
-  status: string;
-  tags: string[];
-}
-
-export interface BlogPostResponse {
-  id: number;
-  title: string;
-  slug: string;
-  content: string;
-  excerpt: string;
-  status: string;
-  tags: { id: number; name: string; slug: string }[];
-  createdAt: string;
-  updatedAt: string;
-  publishedAt: string | null;
-}
-
 // ─── Notification Types ──────────────────────────────────────────
+// BlogPostRequest, BlogPostResponse, InfraEvent re-exported from @petedio/shared above
 
 export interface NotificationEvent {
   source: string;

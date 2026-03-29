@@ -36,11 +36,23 @@ export class ContextAgent {
     log.info(`Gathering context for content type: ${contentType}`);
 
     try {
-      const [argocdApps, allEvents, clusterHealth] = await Promise.all([
-        this.mcBackend.getArgoApps(),
-        this.notifications.getRecentEvents(100),
-        this.mcBackend.getClusterHealth(),
-      ]);
+      // Try to gather live cluster data — gracefully degrade if services are unreachable
+      let argocdApps: Awaited<ReturnType<MCBackendClient['getArgoApps']>> = [];
+      let allEvents: InfraEvent[] = [];
+      let clusterHealth: Awaited<ReturnType<MCBackendClient['getClusterHealth']>> | null = null;
+
+      try {
+        const results = await Promise.all([
+          this.mcBackend.getArgoApps(),
+          this.notifications.getRecentEvents(100),
+          this.mcBackend.getClusterHealth(),
+        ]);
+        argocdApps = results[0];
+        allEvents = results[1];
+        clusterHealth = results[2];
+      } catch (clusterErr) {
+        log.warn(`Cluster services unreachable — using additionalContext only: ${clusterErr instanceof Error ? clusterErr.message : String(clusterErr)}`);
+      }
 
       // Extract trigger events from additional context (set by EventListener)
       const triggerEvents = (additionalContext.triggerEvents as InfraEvent[] | undefined) ?? [];

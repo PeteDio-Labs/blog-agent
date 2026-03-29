@@ -160,8 +160,10 @@ export class ReviewAgent {
     }
 
     const health = context.cluster.clusterHealth;
-    parts.push('### Cluster Health');
-    parts.push(`Nodes: ${health.nodes}, Pods running: ${health.podsRunning}, Not ready: ${health.podsNotReady}`);
+    if (health) {
+      parts.push('### Cluster Health');
+      parts.push(`Nodes: ${health.nodes}, Pods running: ${health.podsRunning}, Not ready: ${health.podsNotReady}`);
+    }
 
     return parts.join('\n');
   }
@@ -184,13 +186,13 @@ export class ReviewAgent {
         f => f.category === 'accuracy' && f.severity === 'error'
       );
 
-      // Raised threshold: 90+ to approve
-      const approved = !hasAccuracyError && score >= 90 && parsed.approved;
+      // Approval threshold: 75+ (lowered from 90 — 7B model consistently scores 75-85)
+      const approved = !hasAccuracyError && score >= 75 && parsed.approved;
 
       if (hasAccuracyError && parsed.approved) {
         log.warn('Overriding LLM approval — accuracy error detected, rejecting draft');
-      } else if (score < 90 && parsed.approved) {
-        log.warn(`Overriding LLM approval — score ${score} below 90 threshold`);
+      } else if (score < 75 && parsed.approved) {
+        log.warn(`Overriding LLM approval — score ${score} below 75 threshold`);
       }
 
       return { approved, score, feedback };

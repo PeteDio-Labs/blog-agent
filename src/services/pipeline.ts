@@ -61,6 +61,13 @@ export class PipelineOrchestrator {
     log.info(`Pipeline ${id} started — ${contentType} (${trigger})`);
 
     try {
+      // Pre-flight: verify blog-api is reachable before starting expensive LLM work
+      const apiHealthy = await this.blogApi.healthCheck();
+      if (!apiHealthy) {
+        throw new Error('Blog API is unreachable — aborting pipeline to avoid wasting LLM tokens');
+      }
+      log.info('Pre-flight check passed — blog-api is reachable');
+
       // Phase 1: Context
       const context = await this.contextAgent.gather(contentType, additionalContext);
 

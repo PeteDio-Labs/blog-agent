@@ -5,6 +5,7 @@
     "": {
       "name": "blog-agent",
       "dependencies": {
+        "@petedio/shared": "^0.1.0",
         "cors": "^2.8.6",
         "dotenv": "^17.3.1",
         "express": "^5.2.1",
@@ -28,6 +29,8 @@
   },
   "packages": {
     "@opentelemetry/api": ["@opentelemetry/api@1.9.0", "", {}, "sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg=="],
+
+    "@petedio/shared": ["@petedio/shared@0.1.0", "https://registry.toastedbytes.com/repository/npm-group/@petedio/shared/-/shared-0.1.0.tgz", { "peerDependencies": { "typescript": "^5" } }, "sha512-qRHyRhKRbcLA/NXqhY0nrXB2DomfgaOGI99mvzdjdU9EcRMoN1PxvHOtSmGHXL4tF/dEZeKclJZRt1NK1d/xBA=="],
 
     "@pinojs/redact": ["@pinojs/redact@0.4.0", "", {}, "sha512-k2ENnmBugE/rzQfEcdWHcCY+/FM3VLzH9cYEsbdsoqrvzAKRhUZeRNhAZvB8OitQJ1TBed3yqWtdjzS6wJKBwg=="],
 

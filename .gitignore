@@ -3,3 +3,6 @@ dist/
 .env
 .env.local
 *.tsbuildinfo
+
+# Local registry credentials — never commit
+.npmrc.local

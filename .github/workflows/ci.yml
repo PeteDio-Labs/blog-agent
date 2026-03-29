@@ -23,13 +23,19 @@ jobs:
           bun-version: latest
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: |
+          echo "//registry.toastedbytes.com/repository/npm-group/:_auth=${{ secrets.NEXUS_NPM_TOKEN }}" >> .npmrc
+          bun install --frozen-lockfile
+          sed -i '/_auth=/d' .npmrc
 
       - name: Typecheck
         run: bun run typecheck
 
       - name: Build
         run: bun run build
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Login to Nexus Registry
         if: github.event_name == 'push'
@@ -58,6 +64,8 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.latest_tag }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          secrets: |
+            npmrc_auth=//registry.toastedbytes.com/repository/npm-group/:_auth=${{ secrets.NEXUS_NPM_TOKEN }}
 
       - name: Summary
         if: github.event_name == 'push'
