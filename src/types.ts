@@ -5,8 +5,9 @@
 
 import { z } from 'zod';
 
-// Shared types — re-exported so internal code can import from one place
-export type { InfraEvent, InfraEventInput, EventSource, EventType, Severity, BlogPostRequest, BlogPostResponse } from '@petedio/shared';
+// Shared types — imported for local use and re-exported so internal code can import from one place
+import type { InfraEvent, InfraEventInput, EventSource, EventType, Severity, BlogPostRequest, BlogPostResponse } from '@petedio/shared';
+export type { InfraEvent, InfraEventInput, EventSource, EventType, Severity, BlogPostRequest, BlogPostResponse };
 
 // ─── Content Types ───────────────────────────────────────────────
 

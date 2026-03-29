@@ -18,7 +18,7 @@ const log = logger.child('test-route');
 const MOCK_CONTEXT: ContextAgentOutput = {
   contentType: 'deploy-changelog',
   triggerFacts: [
-    { id: 'test-1', source: 'kubernetes', type: 'deployment', severity: 'info', message: 'blog-agent deployed to blog-dev namespace', timestamp: new Date().toISOString() },
+    { id: 'test-1', source: 'kubernetes', type: 'deployment', severity: 'info', message: 'blog-agent deployed to blog-dev namespace', timestamp: new Date().toISOString(), processed: false },
   ],
   cluster: {
     argocdApps: [
@@ -26,7 +26,7 @@ const MOCK_CONTEXT: ContextAgentOutput = {
       { name: 'mission-control-dev', namespace: 'mission-control', status: 'Synced', health: 'Healthy', syncedAt: new Date().toISOString() },
     ],
     recentEvents: [
-      { id: 'test-1', source: 'kubernetes', type: 'deployment', severity: 'info', message: 'blog-agent deployed to blog-dev namespace', timestamp: new Date().toISOString() },
+      { id: 'test-1', source: 'kubernetes', type: 'deployment', severity: 'info', message: 'blog-agent deployed to blog-dev namespace', timestamp: new Date().toISOString(), processed: false },
     ],
     recentDeploys: [
       { service: 'blog-agent', namespace: 'blog-dev', image: 'docker.toastedbytes.com/blog-agent:latest', timestamp: new Date().toISOString() },
