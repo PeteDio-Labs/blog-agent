@@ -52,6 +52,17 @@ export class NotificationServiceClient {
     });
   }
 
+  async notifyPublished(title: string, postId: number, blogUrl: string): Promise<void> {
+    await this.sendEvent({
+      source: 'kubernetes',
+      type: 'deployment',
+      severity: 'info',
+      message: `🚀 Blog post auto-published: "${title}" — ${blogUrl}/posts/${postId}`,
+      affected_service: 'blog-agent',
+      metadata: { postId, title, action: 'auto-published' },
+    });
+  }
+
   async healthCheck(): Promise<boolean> {
     try {
       const res = await fetch(`${this.baseUrl}/health`);

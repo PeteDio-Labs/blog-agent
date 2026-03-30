@@ -27,6 +27,8 @@ import type {
 const log = logger.child('pipeline');
 
 const MAX_REVISIONS = 2;
+// Auto-publish when review score meets or exceeds this threshold
+const AUTO_PUBLISH_THRESHOLD = parseInt(process.env.AUTO_PUBLISH_THRESHOLD || '90', 10);
 
 export class PipelineOrchestrator {
   private runs: Map<string, PipelineRun> = new Map();
@@ -111,25 +113,41 @@ export class PipelineOrchestrator {
 
       run.draft = currentDraft;
 
-      // Phase 4: Save draft to Blog API
+      // Phase 4: Save to Blog API — auto-publish if score meets threshold
+      const reviewScore = run.review?.score ?? 0;
+      const autoPublish = run.review?.approved === true && reviewScore >= AUTO_PUBLISH_THRESHOLD;
+      const postStatus = autoPublish ? 'PUBLISHED' : 'DRAFT';
+
+      if (autoPublish) {
+        log.info(`Auto-publishing — score ${reviewScore} >= threshold ${AUTO_PUBLISH_THRESHOLD}`);
+      }
+
       const savedPost = await this.blogApi.createDraft({
         title: currentDraft.title,
         content: currentDraft.content,
         excerpt: currentDraft.excerpt,
-        status: 'DRAFT',
+        status: postStatus,
         tags: currentDraft.tags,
       });
 
       run.blogPostId = savedPost.id;
       draftsCreatedTotal.inc({ content_type: contentType });
-      log.info(`Draft saved to blog API — post ID: ${savedPost.id}`);
+      log.info(`Post saved to blog API — post ID: ${savedPost.id} (${postStatus})`);
 
       // Phase 5: Notify via notification-service
-      await this.notifications.notifyDraftReady(
-        currentDraft.title,
-        savedPost.id,
-        this.blogUrl,
-      );
+      if (autoPublish) {
+        await this.notifications.notifyPublished(
+          currentDraft.title,
+          savedPost.id,
+          this.blogUrl,
+        );
+      } else {
+        await this.notifications.notifyDraftReady(
+          currentDraft.title,
+          savedPost.id,
+          this.blogUrl,
+        );
+      }
 
       run.status = 'completed';
       run.completedAt = new Date().toISOString();
