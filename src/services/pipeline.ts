@@ -15,6 +15,7 @@ import {
 import { ContextAgent } from '../agents/context.js';
 import { WriterAgent } from '../agents/writer.js';
 import { ReviewAgent } from '../agents/review.js';
+import { ImageGeneratorAgent } from '../agents/imageGenerator.js';
 import { BlogApiClient } from '../clients/blogApi.js';
 import { NotificationServiceClient } from '../clients/notificationService.js';
 import type {
@@ -40,6 +41,7 @@ export class PipelineOrchestrator {
     private blogApi: BlogApiClient,
     private notifications: NotificationServiceClient,
     private blogUrl: string,
+    private imageGenerator?: ImageGeneratorAgent,
   ) {}
 
   async run(
@@ -134,7 +136,16 @@ export class PipelineOrchestrator {
       draftsCreatedTotal.inc({ content_type: contentType });
       log.info(`Post saved to blog API — post ID: ${savedPost.id} (${postStatus})`);
 
-      // Phase 5: Notify via notification-service
+      // Phase 5: Generate cover image (non-fatal)
+      if (this.imageGenerator) {
+        const imageUrl = await this.imageGenerator.generate(currentDraft, savedPost.id);
+        if (imageUrl) {
+          await this.blogApi.updatePost(savedPost.id, { coverImageUrl: imageUrl });
+          log.info(`Cover image set for post ${savedPost.id}: ${imageUrl}`);
+        }
+      }
+
+      // Phase 6: Notify
       if (autoPublish) {
         await this.notifications.notifyPublished(
           currentDraft.title,

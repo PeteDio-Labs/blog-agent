@@ -7,6 +7,8 @@ import { fetchWithRetry } from '@petedio/shared';
 import { logger } from '../utils/logger.js';
 import type { BlogPostRequest, BlogPostResponse } from '../types.js';
 
+type BlogPostUpdate = Partial<BlogPostRequest> & { coverImageUrl?: string | null };
+
 const log = logger.child('blog-api-client');
 
 export class BlogApiClient {
@@ -32,7 +34,7 @@ export class BlogApiClient {
     return res.json() as Promise<BlogPostResponse>;
   }
 
-  async updatePost(id: number, update: Partial<BlogPostRequest>): Promise<BlogPostResponse> {
+  async updatePost(id: number, update: BlogPostUpdate): Promise<BlogPostResponse> {
     log.info(`Updating post ${id}`);
     const res = await fetchWithRetry(`${this.baseUrl}/api/v1/admin/posts/${id}`, {
       method: 'PUT',

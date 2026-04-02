@@ -15,6 +15,8 @@ import { BlogApiClient } from './clients/blogApi.js';
 import { NotificationServiceClient } from './clients/notificationService.js';
 import { MCBackendClient } from './clients/mcBackend.js';
 import { RagClient } from './clients/ragClient.js';
+import { MinioClient } from './clients/minioClient.js';
+import { ImageGeneratorAgent } from './agents/imageGenerator.js';
 import { appUp } from './metrics/index.js';
 import { logger } from './utils/logger.js';
 
@@ -45,6 +47,16 @@ const contextAgent = new ContextAgent(mcBackend, notifications, ragClient);
 const writerAgent = new WriterAgent(llmProvider);
 const reviewAgent = new ReviewAgent(llmProvider);
 
+// Initialize image generator (optional — skipped if env vars missing)
+let imageGenerator: ImageGeneratorAgent | undefined;
+try {
+  const minio = new MinioClient();
+  imageGenerator = new ImageGeneratorAgent(minio);
+  logger.info('Image generator initialized (NanoBanana 2 + MinIO)');
+} catch (err) {
+  logger.warn(`Image generator disabled: ${err instanceof Error ? err.message : String(err)}`);
+}
+
 // Initialize pipeline
 const pipeline = new PipelineOrchestrator(
   contextAgent,
@@ -53,6 +65,7 @@ const pipeline = new PipelineOrchestrator(
   blogApi,
   notifications,
   BLOG_URL,
+  imageGenerator,
 );
 
 // Initialize scheduler
