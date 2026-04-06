@@ -151,7 +151,7 @@ export class ContextAgent {
 
     // Time window: ±10 minutes around the earliest trigger event
     const triggerTimestamps = triggerEvents
-      .map(e => new Date(e.timestamp).getTime())
+      .map(e => new Date(e.timestamp ?? Date.now()).getTime())
       .filter(t => !isNaN(t));
     const earliest = triggerTimestamps.length > 0 ? Math.min(...triggerTimestamps) : Date.now();
     const windowStart = earliest - DEPLOY_EVENT_WINDOW_MS;
