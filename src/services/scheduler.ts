@@ -61,7 +61,7 @@ export class Scheduler {
         job.lastRun = now;
         log.info(`Running scheduled job: ${job.name}`);
 
-        this.pipeline.run(job.contentType, 'schedule').catch(err => {
+        this.pipeline.runWithReporting(job.contentType, 'schedule').catch(err => {
           log.error(`Scheduled job ${job.name} failed:`, err);
         });
       }

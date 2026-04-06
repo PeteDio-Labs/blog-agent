@@ -8,6 +8,7 @@ import { createGenerateRouter } from './generate.js';
 import { createDraftsRouter } from './drafts.js';
 import { createHealthRouter } from './health.js';
 import { createTestRouter } from './test.js';
+import { createMCDispatchRouter } from './mcDispatch.js';
 import type { PipelineOrchestrator } from '../../services/pipeline.js';
 import type { LLMProvider } from '../../providers/llm.js';
 
@@ -16,6 +17,9 @@ export function createRoutes(pipeline: PipelineOrchestrator, llmProvider: LLMPro
 
   // Health and metrics (no version prefix)
   routes.use(createHealthRouter(pipeline));
+
+  // MC Backend dispatch endpoint — TaskPayload in, AgentResult reported back
+  routes.use('/run', createMCDispatchRouter(pipeline));
 
   // Versioned API routes
   const apiV1 = Router();

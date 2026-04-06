@@ -18,6 +18,7 @@ import { ReviewAgent } from '../agents/review.js';
 import { ImageGeneratorAgent } from '../agents/imageGenerator.js';
 import { BlogApiClient } from '../clients/blogApi.js';
 import { NotificationServiceClient } from '../clients/notificationService.js';
+import { AgentReporter } from '@petedio/shared/agents';
 import type {
   ContentType,
   TriggerType,
@@ -185,6 +186,73 @@ export class PipelineOrchestrator {
 
       return run;
     }
+  }
+
+  /**
+   * Run the pipeline and report status + result to Mission Control.
+   * Use this for all self-triggered runs (event, schedule, api).
+   * MC-dispatched runs (/run endpoint) manage their own reporter — use run() directly.
+   */
+  async runWithReporting(
+    contentType: ContentType,
+    trigger: TriggerType,
+    topic?: string,
+    additionalContext: Record<string, unknown> = {},
+  ): Promise<PipelineRun> {
+    const mcUrl = process.env.MC_BACKEND_URL ?? 'http://localhost:3000';
+    const taskId = randomUUID();
+    const reporter = new AgentReporter({ mcUrl, taskId, agentName: 'blog-agent' });
+    const startMs = Date.now();
+
+    await reporter.running(`Generating ${contentType}${topic ? `: "${topic}"` : ''} (trigger: ${trigger})`);
+
+    const pipelineRun = await this.run(contentType, trigger, topic, additionalContext);
+    const durationMs = Date.now() - startMs;
+
+    if (pipelineRun.status === 'completed') {
+      await reporter.complete({
+        taskId,
+        agentName: 'blog-agent',
+        status: 'complete',
+        summary: pipelineRun.draft
+          ? `"${pipelineRun.draft.title}" saved as ${pipelineRun.blogPostId ? `post #${pipelineRun.blogPostId}` : 'draft'}`
+          : `Pipeline completed (${contentType})`,
+        artifacts: [
+          ...(pipelineRun.draft ? [{
+            type: 'blog-draft' as const,
+            label: pipelineRun.draft.title,
+            content: [
+              `# ${pipelineRun.draft.title}`,
+              '',
+              `**Tags:** ${pipelineRun.draft.tags?.join(', ') ?? 'none'}`,
+              `**Excerpt:** ${pipelineRun.draft.excerpt}`,
+              ...(pipelineRun.blogPostId ? [`**Post ID:** ${pipelineRun.blogPostId}`] : []),
+              `**Review score:** ${pipelineRun.review?.score ?? 'N/A'}`,
+              '',
+              '---',
+              '',
+              pipelineRun.draft.content,
+            ].join('\n'),
+          }] : []),
+          {
+            type: 'log' as const,
+            label: 'Pipeline stats',
+            content: [
+              `Duration: ${(durationMs / 1000).toFixed(1)}s`,
+              `Revisions: ${pipelineRun.revisionCount}`,
+              `Review score: ${pipelineRun.review?.score ?? 'N/A'}`,
+              `Tokens: ${pipelineRun.totalTokens.input + pipelineRun.totalTokens.output} total`,
+            ].join('\n'),
+          },
+        ],
+        durationMs,
+        completedAt: new Date().toISOString(),
+      });
+    } else {
+      await reporter.fail(pipelineRun.error ?? 'Pipeline failed (unknown error)');
+    }
+
+    return pipelineRun;
   }
 
   async publishDraft(postId: number): Promise<void> {

@@ -117,7 +117,7 @@ export class EventListener {
     sseTriggeredPipelines.inc();
 
     this.pipeline
-      .run('deploy-changelog', 'event', topic, { triggerEvents: events })
+      .runWithReporting('deploy-changelog', 'event', topic, { triggerEvents: events })
       .then(run => {
         if (run.status === 'completed') {
           log.info(`Event-triggered pipeline completed — "${run.draft?.title}" (post ${run.blogPostId})`);

@@ -52,7 +52,7 @@ let imageGenerator: ImageGeneratorAgent | undefined;
 try {
   const minio = new MinioClient();
   imageGenerator = new ImageGeneratorAgent(minio);
-  logger.info('Image generator initialized (NanoBanana 2 + MinIO)');
+  logger.info('Image generator initialized (Stable Diffusion A1111 + MinIO)');
 } catch (err) {
   logger.warn(`Image generator disabled: ${err instanceof Error ? err.message : String(err)}`);
 }

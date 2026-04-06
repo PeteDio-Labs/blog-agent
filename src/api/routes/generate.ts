@@ -32,7 +32,7 @@ export function createGenerateRouter(pipeline: PipelineOrchestrator): Router {
     log.info(`Generate request: ${contentType}${topic ? ` — "${topic}"` : ''}`);
 
     // Run pipeline async — return immediately with run ID
-    const runPromise = pipeline.run(contentType, 'api', topic, context);
+    const runPromise = pipeline.runWithReporting(contentType, 'api', topic, context);
 
     // Wait a short moment to see if it fails immediately
     const run = await Promise.race([
