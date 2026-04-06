@@ -57,7 +57,7 @@ export function createMCDispatchRouter(pipeline: PipelineOrchestrator): Router {
       const startMs = Date.now();
       try {
         await reporter.running(`Generating ${contentType}${topic ? `: "${topic}"` : ''}...`);
-        log.info({ taskId: payload.taskId, contentType, topic }, 'MC-dispatched pipeline starting');
+        log.info(`MC-dispatched pipeline starting — taskId: ${payload.taskId}, contentType: ${contentType}${topic ? `, topic: "${topic}"` : ''}`);
 
         const run = await pipeline.run(contentType as Parameters<typeof pipeline.run>[0], 'api', topic, context ?? {});
 
@@ -111,7 +111,7 @@ export function createMCDispatchRouter(pipeline: PipelineOrchestrator): Router {
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        log.error({ taskId: payload.taskId, err: msg }, 'MC-dispatched pipeline error');
+        log.error(`MC-dispatched pipeline error — taskId: ${payload.taskId}: ${msg}`);
         await reporter.fail(msg);
       }
     });

@@ -158,7 +158,7 @@ export class ContextAgent {
     const windowEnd = earliest + DEPLOY_EVENT_WINDOW_MS;
 
     const filtered = events.filter(e => {
-      const eventTime = new Date(e.timestamp).getTime();
+      const eventTime = new Date(e.timestamp ?? Date.now()).getTime();
 
       // Must be within time window
       if (eventTime < windowStart || eventTime > windowEnd) return false;
@@ -202,7 +202,7 @@ export class ContextAgent {
         image: (e as unknown as Record<string, unknown>).metadata
           ? String((e as unknown as { metadata?: { image?: string } }).metadata?.image ?? 'unknown')
           : 'unknown',
-        timestamp: e.timestamp,
+        timestamp: e.timestamp ?? new Date().toISOString(),
       }));
   }
 }
