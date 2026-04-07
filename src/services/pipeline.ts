@@ -50,6 +50,7 @@ export class PipelineOrchestrator {
     trigger: TriggerType,
     topic?: string,
     additionalContext: Record<string, unknown> = {},
+    onProgress?: (msg: string) => Promise<void>,
   ): Promise<PipelineRun> {
     const id = randomUUID();
     const run: PipelineRun = {
@@ -65,11 +66,17 @@ export class PipelineOrchestrator {
     this.runs.set(id, run);
     log.info(`Pipeline ${id} started — ${contentType} (${trigger})`);
 
+    const progress = async (msg: string) => {
+      if (onProgress) await onProgress(msg).catch(() => {});
+    };
+
     try {
       // Phase 1: Context
+      await progress('Gathering cluster context...');
       const context = await this.contextAgent.gather(contentType, additionalContext);
 
       // Phase 2: Write
+      await progress(`Writing ${contentType} draft${topic ? `: "${topic}"` : ''}...`);
       let writerOutput = await this.writerAgent.write(context, topic);
       run.totalTokens.input += writerOutput.tokensUsed.input;
       run.totalTokens.output += writerOutput.tokensUsed.output;
@@ -78,22 +85,24 @@ export class PipelineOrchestrator {
 
       // Phase 3: Review + revision loop
       for (let i = 0; i <= MAX_REVISIONS; i++) {
+        await progress(`Reviewing draft (pass ${i + 1})...`);
         const reviewOutput = await this.reviewAgent.review(currentDraft, context);
         run.totalTokens.input += reviewOutput.tokensUsed.input;
         run.totalTokens.output += reviewOutput.tokensUsed.output;
         run.review = reviewOutput.result;
 
         if (reviewOutput.result.approved) {
+          await progress(`Draft approved — score: ${reviewOutput.result.score}/100`);
           log.info(`Draft approved on ${i === 0 ? 'first pass' : `revision ${i}`} — score: ${reviewOutput.result.score}`);
           break;
         }
 
         if (i < MAX_REVISIONS) {
-          // Build feedback string for writer
           const feedback = reviewOutput.result.feedback
             .map(f => `[${f.severity}] ${f.category}: ${f.message}${f.suggestion ? ` → ${f.suggestion}` : ''}`)
             .join('\n');
 
+          await progress(`Revising draft (${i + 1}/${MAX_REVISIONS}) — score was ${reviewOutput.result.score}/100...`);
           log.info(`Revision ${i + 1}/${MAX_REVISIONS} — score: ${reviewOutput.result.score}`);
           reviewRevisionsTotal.inc();
           run.revisionCount++;
@@ -113,6 +122,8 @@ export class PipelineOrchestrator {
       const reviewScore = run.review?.score ?? 0;
       const autoPublish = run.review?.approved === true && reviewScore >= AUTO_PUBLISH_THRESHOLD;
       const postStatus = autoPublish ? 'PUBLISHED' : 'DRAFT';
+
+      await progress(autoPublish ? `Auto-publishing (score ${reviewScore} ≥ ${AUTO_PUBLISH_THRESHOLD})...` : 'Saving draft to blog API...');
 
       if (autoPublish) {
         log.info(`Auto-publishing — score ${reviewScore} >= threshold ${AUTO_PUBLISH_THRESHOLD}`);
@@ -199,7 +210,7 @@ export class PipelineOrchestrator {
 
     await reporter.running(`Generating ${contentType}${topic ? `: "${topic}"` : ''} (trigger: ${trigger})`);
 
-    const pipelineRun = await this.run(contentType, trigger, topic, additionalContext);
+    const pipelineRun = await this.run(contentType, trigger, topic, additionalContext, (msg) => reporter.running(msg));
     const durationMs = Date.now() - startMs;
 
     if (pipelineRun.status === 'completed') {

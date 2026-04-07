@@ -59,7 +59,7 @@ export function createMCDispatchRouter(pipeline: PipelineOrchestrator): Router {
         await reporter.running(`Generating ${contentType}${topic ? `: "${topic}"` : ''}...`);
         log.info(`MC-dispatched pipeline starting — taskId: ${payload.taskId}, contentType: ${contentType}${topic ? `, topic: "${topic}"` : ''}`);
 
-        const run = await pipeline.run(contentType as Parameters<typeof pipeline.run>[0], 'api', topic, context ?? {});
+        const run = await pipeline.run(contentType as Parameters<typeof pipeline.run>[0], 'api', topic, context ?? {}, (msg) => reporter.running(msg));
 
         const durationMs = Date.now() - startMs;
 
