@@ -71,6 +71,7 @@ const pipeline = new PipelineOrchestrator(
 // Initialize scheduler
 const scheduler = new Scheduler(pipeline);
 scheduler.registerWeeklyRecap();
+scheduler.registerHowTo();
 
 // Initialize event listener (SSE → deploy changelogs)
 const eventListener = new EventListener(MC_BACKEND_URL, pipeline);

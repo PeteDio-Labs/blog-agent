@@ -1,7 +1,12 @@
 /**
  * Scheduler
- * Simple interval-based cron for scheduled content generation.
- * Weekly recap: Monday 12:00 PM CST (18:00 UTC)
+ * Day-of-week + hour based cron for content generation.
+ * All times in UTC. Jobs are deduplicated per calendar day.
+ *
+ * Current schedule:
+ *   weekly-recap  — Monday    18:00 UTC (12:00 PM CST)
+ *   how-to        — Wednesday 18:00 UTC (12:00 PM CST)
+ *   how-to        — Saturday  18:00 UTC (12:00 PM CST)
  */
 
 import { logger } from '../utils/logger.js';
@@ -13,9 +18,11 @@ const log = logger.child('scheduler');
 interface ScheduledJob {
   name: string;
   contentType: ContentType;
-  intervalMs: number;
+  /** UTC day of week: 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat */
+  utcDay: number;
+  /** UTC hour to fire (0–23) */
+  utcHour: number;
   lastRun?: Date;
-  timer?: ReturnType<typeof setInterval>;
 }
 
 export class Scheduler {
@@ -25,7 +32,6 @@ export class Scheduler {
   constructor(private pipeline: PipelineOrchestrator) {}
 
   start(): void {
-    // Check every minute if a scheduled job should run
     this.checkInterval = setInterval(() => this.tick(), 60_000);
     log.info(`Scheduler started — ${this.jobs.length} jobs registered`);
   }
@@ -35,32 +41,27 @@ export class Scheduler {
       clearInterval(this.checkInterval);
       this.checkInterval = undefined;
     }
-    for (const job of this.jobs) {
-      if (job.timer) {
-        clearInterval(job.timer);
-        job.timer = undefined;
-      }
-    }
     log.info('Scheduler stopped');
   }
 
   registerWeeklyRecap(): void {
-    this.jobs.push({
-      name: 'weekly-recap',
-      contentType: 'weekly-recap',
-      intervalMs: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
-    log.info('Registered weekly recap — runs Monday 12:00 PM CST');
+    this.jobs.push({ name: 'weekly-recap', contentType: 'weekly-recap', utcDay: 1, utcHour: 18 });
+    log.info('Registered: weekly-recap — Monday 18:00 UTC');
+  }
+
+  registerHowTo(): void {
+    // Two how-to posts per week — writer self-selects topic from cluster context
+    this.jobs.push({ name: 'how-to-wed', contentType: 'how-to', utcDay: 3, utcHour: 18 });
+    this.jobs.push({ name: 'how-to-sat', contentType: 'how-to', utcDay: 6, utcHour: 18 });
+    log.info('Registered: how-to — Wednesday + Saturday 18:00 UTC (topic auto-selected from context)');
   }
 
   private tick(): void {
     const now = new Date();
-
     for (const job of this.jobs) {
       if (this.shouldRun(job, now)) {
         job.lastRun = now;
         log.info(`Running scheduled job: ${job.name}`);
-
         this.pipeline.runWithReporting(job.contentType, 'schedule').catch(err => {
           log.error(`Scheduled job ${job.name} failed:`, err);
         });
@@ -69,26 +70,17 @@ export class Scheduler {
   }
 
   private shouldRun(job: ScheduledJob, now: Date): boolean {
-    // Weekly recap: Monday at 18:00 UTC (12:00 PM CST)
-    if (job.name === 'weekly-recap') {
-      const isMonday = now.getUTCDay() === 1;
-      const isNoon = now.getUTCHours() === 18 && now.getUTCMinutes() === 0;
+    if (now.getUTCDay() !== job.utcDay) return false;
+    if (now.getUTCHours() !== job.utcHour) return false;
 
-      if (!isMonday || !isNoon) return false;
-
-      // Don't run if already ran today
-      if (job.lastRun) {
-        const lastRunDate = job.lastRun.toISOString().split('T')[0];
-        const todayDate = now.toISOString().split('T')[0];
-        if (lastRunDate === todayDate) return false;
-      }
-
-      return true;
+    // Deduplicate: only fire once per calendar day
+    if (job.lastRun) {
+      const lastRunDate = job.lastRun.toISOString().split('T')[0];
+      const todayDate = now.toISOString().split('T')[0];
+      if (lastRunDate === todayDate) return false;
     }
 
-    // Generic interval-based check
-    if (!job.lastRun) return true;
-    return now.getTime() - job.lastRun.getTime() >= job.intervalMs;
+    return true;
   }
 
   getJobs(): Array<{ name: string; contentType: ContentType; lastRun?: string }> {
