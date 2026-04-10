@@ -88,7 +88,7 @@ export class EventListener {
       return;
     }
 
-    if (event.affected_service === SELF_SERVICE || event.source === 'agent') {
+    if (event.affected_service === SELF_SERVICE || (event.source as string) === 'agent') {
       log.debug(`Ignoring self-generated event: ${event.source}/${event.type} (${event.affected_service})`);
       return;
     }
