@@ -43,8 +43,8 @@ export class NotificationServiceClient {
 
   async notifyDraftReady(title: string, postId: number, blogUrl: string): Promise<void> {
     await this.sendEvent({
-      source: 'kubernetes',
-      type: 'deployment',
+      source: 'agent',
+      type: 'agent-complete',
       severity: 'info',
       message: `📝 Blog draft ready for review: "${title}" — ${blogUrl}/drafts/${postId}`,
       affected_service: 'blog-agent',
@@ -54,8 +54,8 @@ export class NotificationServiceClient {
 
   async notifyPublished(title: string, postId: number, blogUrl: string): Promise<void> {
     await this.sendEvent({
-      source: 'kubernetes',
-      type: 'deployment',
+      source: 'agent',
+      type: 'agent-complete',
       severity: 'info',
       message: `🚀 Blog post auto-published: "${title}" — ${blogUrl}/posts/${postId}`,
       affected_service: 'blog-agent',

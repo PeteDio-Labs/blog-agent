@@ -21,6 +21,9 @@ const log = logger.child('event-listener');
 /** Event types that should trigger a deploy-changelog */
 const DEPLOY_EVENT_TYPES = new Set(['deployment', 'rollout']);
 
+/** Ignore events originating from this agent to prevent feedback loops */
+const SELF_SERVICE = 'blog-agent';
+
 /** Default debounce window — collect deploys for 2 minutes before generating */
 const DEFAULT_DEBOUNCE_MS = 2 * 60 * 1000;
 
@@ -82,6 +85,11 @@ export class EventListener {
   private handleEvent(event: InfraEvent): void {
     if (!DEPLOY_EVENT_TYPES.has(event.type)) {
       log.debug(`Ignoring non-deploy event: ${event.source}/${event.type}`);
+      return;
+    }
+
+    if (event.affected_service === SELF_SERVICE || event.source === 'agent') {
+      log.debug(`Ignoring self-generated event: ${event.source}/${event.type} (${event.affected_service})`);
       return;
     }
 

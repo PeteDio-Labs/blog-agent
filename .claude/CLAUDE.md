@@ -94,13 +94,9 @@ src/
 - Express v5 route params typed via `Request<{ id: string }>`
 - Zod v4 for request validation
 - Native fetch for all HTTP clients (no axios)
-- LLM via Ollama `petedio-writer` model at `http://192.168.50.59:11434` — no external API keys needed
+- LLM via Ollama `gemma4:e4b` model at `http://192.168.50.59:11434` — no external API keys needed
 - `LLMProvider` interface allows swapping backends if needed in the future
 
-## Ollama Model: petedio-writer
-
-- **Modelfile**: `gitops/ansible/roles/ollama-models/files/petedio-writer.Modelfile`
-- **Base model**: `qwen2.5:7b` (4.7GB, upgraded from qwen-tools 3B for better style adherence)
 - **Parameters**: temperature 0.8, top_p 0.92, top_k 50, num_predict 4096, repeat_penalty 1.15
 - **Deploy**: `ansible-playbook playbooks/ollama-models.yml` (or `-e ollama_force_recreate=true` to rebuild)
 - **Status**: Ollama-only — no Claude API dependency, no external API keys

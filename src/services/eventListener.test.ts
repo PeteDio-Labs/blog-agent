@@ -8,7 +8,7 @@ function createMockPipeline() {
   const runs: Array<{ contentType: string; trigger: string; topic?: string; context?: Record<string, unknown> }> = [];
   return {
     runs,
-    run: mock(async (contentType: string, trigger: string, topic?: string, context?: Record<string, unknown>) => {
+    runWithReporting: mock(async (contentType: string, trigger: string, topic?: string, context?: Record<string, unknown>) => {
       runs.push({ contentType, trigger, topic, context });
       return {
         id: 'test-run-1',
@@ -125,7 +125,7 @@ describe('EventListener', () => {
     // Wait for debounce to fire
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    expect(mockPipeline.run).toHaveBeenCalledTimes(1);
+    expect(mockPipeline.runWithReporting).toHaveBeenCalledTimes(1);
     expect(mockPipeline.runs[0]!.contentType).toBe('deploy-changelog');
     expect(mockPipeline.runs[0]!.trigger).toBe('event');
     expect(mockPipeline.runs[0]!.topic).toContain('blog-api');
