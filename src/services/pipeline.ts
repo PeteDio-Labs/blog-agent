@@ -29,8 +29,15 @@ import type {
 const log = logger.child('pipeline');
 
 const MAX_REVISIONS = 2;
-// Auto-publish when review score meets or exceeds this threshold
+// Default auto-publish threshold; can be overridden via env
 const AUTO_PUBLISH_THRESHOLD = parseInt(process.env.AUTO_PUBLISH_THRESHOLD || '90', 10);
+// Narrative/opinionated content types use a lower threshold — easier to approve voice-driven posts
+const STORY_CONTENT_TYPES = new Set<ContentType>(['weekly-recap', 'how-to']);
+const STORY_PUBLISH_THRESHOLD = parseInt(process.env.STORY_PUBLISH_THRESHOLD || '80', 10);
+
+function getPublishThreshold(contentType: ContentType): number {
+  return STORY_CONTENT_TYPES.has(contentType) ? STORY_PUBLISH_THRESHOLD : AUTO_PUBLISH_THRESHOLD;
+}
 
 export class PipelineOrchestrator {
   private runs: Map<string, PipelineRun> = new Map();
@@ -120,13 +127,14 @@ export class PipelineOrchestrator {
 
       // Phase 4: Save to Blog API — auto-publish if score meets threshold
       const reviewScore = run.review?.score ?? 0;
-      const autoPublish = run.review?.approved === true && reviewScore >= AUTO_PUBLISH_THRESHOLD;
+      const publishThreshold = getPublishThreshold(contentType);
+      const autoPublish = run.review?.approved === true && reviewScore >= publishThreshold;
       const postStatus = autoPublish ? 'PUBLISHED' : 'DRAFT';
 
-      await progress(autoPublish ? `Auto-publishing (score ${reviewScore} ≥ ${AUTO_PUBLISH_THRESHOLD})...` : 'Saving draft to blog API...');
+      await progress(autoPublish ? `Auto-publishing (score ${reviewScore} ≥ ${publishThreshold})...` : 'Saving draft to blog API...');
 
       if (autoPublish) {
-        log.info(`Auto-publishing — score ${reviewScore} >= threshold ${AUTO_PUBLISH_THRESHOLD}`);
+        log.info(`Auto-publishing — score ${reviewScore} >= threshold ${publishThreshold} (${contentType})`);
       }
 
       const savedPost = await this.blogApi.createDraft({
