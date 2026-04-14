@@ -44,10 +44,11 @@ export class NotificationServiceClient {
   async notifyDraftReady(title: string, postId: number, blogUrl: string): Promise<void> {
     const draftUrl = `${blogUrl}/drafts/${postId}`;
     await this.sendEvent({
-      source: 'agent',
-      type: 'agent-complete',
+      source: 'kubernetes',
+      type: 'deployment',
       severity: 'info',
       message: `📝 Blog draft ready for review: "${title}" — ${draftUrl}`,
+      namespace: 'blog-dev',
       affected_service: 'blog-agent',
       metadata: { postId, title, action: 'draft-ready', blogUrl: draftUrl, path: `/drafts/${postId}` },
     });
@@ -57,10 +58,11 @@ export class NotificationServiceClient {
     const postPath = slug ? `/posts/${slug}` : `/posts/${postId}`;
     const postUrl = `${blogUrl}${postPath}`;
     await this.sendEvent({
-      source: 'agent',
-      type: 'agent-complete',
+      source: 'kubernetes',
+      type: 'deployment',
       severity: 'info',
       message: `🚀 Blog post auto-published: "${title}" — ${postUrl}`,
+      namespace: 'blog-dev',
       affected_service: 'blog-agent',
       metadata: { postId, title, slug, action: 'auto-published', blogUrl: postUrl, path: postPath },
     });
