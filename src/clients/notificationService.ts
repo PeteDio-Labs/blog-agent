@@ -42,24 +42,27 @@ export class NotificationServiceClient {
   }
 
   async notifyDraftReady(title: string, postId: number, blogUrl: string): Promise<void> {
+    const draftUrl = `${blogUrl}/drafts/${postId}`;
     await this.sendEvent({
       source: 'agent',
       type: 'agent-complete',
       severity: 'info',
-      message: `📝 Blog draft ready for review: "${title}" — ${blogUrl}/drafts/${postId}`,
+      message: `📝 Blog draft ready for review: "${title}" — ${draftUrl}`,
       affected_service: 'blog-agent',
-      metadata: { postId, title, action: 'draft-ready' },
+      metadata: { postId, title, action: 'draft-ready', blogUrl: draftUrl, path: `/drafts/${postId}` },
     });
   }
 
-  async notifyPublished(title: string, postId: number, blogUrl: string): Promise<void> {
+  async notifyPublished(title: string, postId: number, blogUrl: string, slug?: string): Promise<void> {
+    const postPath = slug ? `/posts/${slug}` : `/posts/${postId}`;
+    const postUrl = `${blogUrl}${postPath}`;
     await this.sendEvent({
       source: 'agent',
       type: 'agent-complete',
       severity: 'info',
-      message: `🚀 Blog post auto-published: "${title}" — ${blogUrl}/posts/${postId}`,
+      message: `🚀 Blog post auto-published: "${title}" — ${postUrl}`,
       affected_service: 'blog-agent',
-      metadata: { postId, title, action: 'auto-published' },
+      metadata: { postId, title, slug, action: 'auto-published', blogUrl: postUrl, path: postPath },
     });
   }
 

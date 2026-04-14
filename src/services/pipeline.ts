@@ -164,6 +164,7 @@ export class PipelineOrchestrator {
           currentDraft.title,
           savedPost.id,
           this.blogUrl,
+          savedPost.slug,
         );
       } else {
         await this.notifications.notifyDraftReady(

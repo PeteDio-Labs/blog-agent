@@ -278,15 +278,13 @@ Respond with the same JSON format as before — the full revised draft.`;
 
     if (titleMatch) {
       log.info('Partially parsed JSON fields from malformed output');
-      return {
+      return this.jsonToDraft({
         title: titleMatch[1],
         slug: slugMatch?.[1] ?? `draft-${Date.now()}`,
         content: contentMatch?.[1] ?? cleaned,
         excerpt: excerptMatch?.[1] ?? cleaned.slice(0, 200),
         tags: [contentType],
-        contentType,
-        frontmatter: {},
-      };
+      }, contentType);
     }
 
     log.warn('Failed to parse writer output as JSON, falling back to raw text');
@@ -314,8 +312,9 @@ Respond with the same JSON format as before — the full revised draft.`;
     let content = String(parsed.content ?? '');
 
     // Fix double-wrapped JSON: LLM sometimes returns the entire JSON object as the content string
-    if (content.trimStart().startsWith('{')) {
-      const inner = this.tryParseJson(content);
+    let unwrapDepth = 0;
+    while (content.trimStart().startsWith('{') && unwrapDepth < 3) {
+      const inner = this.tryParseJson(content) ?? this.parseJsonLikeObject(content);
       if (inner && typeof inner.content === 'string' && inner.content.length > 0) {
         log.info('Unwrapped double-wrapped JSON in content field');
         content = inner.content;
@@ -324,17 +323,87 @@ Respond with the same JSON format as before — the full revised draft.`;
         if (!parsed.slug && inner.slug) parsed.slug = inner.slug;
         if (!parsed.excerpt && inner.excerpt) parsed.excerpt = inner.excerpt;
         if (!parsed.tags && inner.tags) parsed.tags = inner.tags;
+        unwrapDepth++;
+        continue;
       }
+      break;
+    }
+
+    let excerpt = String(parsed.excerpt ?? '').slice(0, 200);
+    if (!excerpt || excerpt.trimStart().startsWith('{')) {
+      excerpt = content.slice(0, 200);
     }
 
     return {
       title: String(parsed.title ?? `Draft — ${contentType}`),
       slug: String(parsed.slug ?? `draft-${Date.now()}`),
       content,
-      excerpt: String(parsed.excerpt ?? '').slice(0, 200),
+      excerpt,
       tags: Array.isArray(parsed.tags) ? parsed.tags.map(String) : [contentType],
       contentType,
       frontmatter: {},
     };
+  }
+
+  /**
+   * Best-effort parser for almost-JSON objects where inner content has unescaped quotes.
+   * Extracts fields by delimiters instead of full JSON parsing.
+   */
+  private parseJsonLikeObject(text: string): Record<string, unknown> | null {
+    const title = this.extractDelimited(text, '"title":"', ['","slug":', '","content":', '"}']);
+    const slug = this.extractDelimited(text, '"slug":"', ['","content":', '","excerpt":', '"}']);
+    const content = this.extractDelimited(text, '"content":"', ['","excerpt":', '","tags":', '"}']);
+    const excerpt = this.extractDelimited(text, '"excerpt":"', ['","tags":', '"}']);
+
+    if (!content) return null;
+
+    let tags: string[] = [];
+    const tagsStart = text.indexOf('"tags":[');
+    if (tagsStart >= 0) {
+      const tagsEnd = text.indexOf(']', tagsStart);
+      if (tagsEnd > tagsStart) {
+        const tagsRaw = text.slice(tagsStart + '"tags":['.length, tagsEnd).trim();
+        if (tagsRaw.length > 0) {
+          tags = tagsRaw
+            .split(',')
+            .map((tag) => tag.trim().replace(/^"|"$/g, ''))
+            .filter(Boolean);
+        }
+      }
+    }
+
+    return {
+      ...(title ? { title: this.unescapeJsonString(title) } : {}),
+      ...(slug ? { slug: this.unescapeJsonString(slug) } : {}),
+      content: this.unescapeJsonString(content),
+      ...(excerpt ? { excerpt: this.unescapeJsonString(excerpt) } : {}),
+      ...(tags.length > 0 ? { tags } : {}),
+    };
+  }
+
+  private extractDelimited(text: string, startToken: string, endTokens: string[]): string | null {
+    const start = text.indexOf(startToken);
+    if (start < 0) return null;
+    const valueStart = start + startToken.length;
+
+    const endCandidates = endTokens
+      .map((token) => text.indexOf(token, valueStart))
+      .filter((idx) => idx >= 0);
+
+    if (endCandidates.length === 0) {
+      const trailing = text.slice(valueStart).replace(/"\s*\}?$/, '').trim();
+      return trailing.length > 0 ? trailing : null;
+    }
+    const end = Math.min(...endCandidates);
+    return text.slice(valueStart, end);
+  }
+
+  private unescapeJsonString(value: string): string {
+    return value
+      .replace(/\\\\/g, '\\')
+      .replace(/\\"/g, '"')
+      .replace(/\\n/g, '\n')
+      .replace(/\\t/g, '\t')
+      .replace(/\\r/g, '\r');
   }
 }
