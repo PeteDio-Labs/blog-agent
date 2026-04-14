@@ -22,6 +22,7 @@ interface ScheduledJob {
   utcDay: number;
   /** UTC hour to fire (0–23) */
   utcHour: number;
+  additionalContext?: Record<string, unknown>;
   lastRun?: Date;
 }
 
@@ -50,10 +51,13 @@ export class Scheduler {
   }
 
   registerHowTo(): void {
-    // Two how-to posts per week — writer self-selects topic from cluster context
-    this.jobs.push({ name: 'how-to-wed', contentType: 'how-to', utcDay: 3, utcHour: 18 });
-    this.jobs.push({ name: 'how-to-sat', contentType: 'how-to', utcDay: 6, utcHour: 18 });
-    log.info('Registered: how-to — Wednesday + Saturday 18:00 UTC (topic auto-selected from context)');
+    const howToContext = {
+      topicBias: 'Focus on platform engineering, SRE, observability, GitOps, multi-agent systems, or homelab automation. Write for engineers who already know the basics — avoid generic intro-to-Kubernetes topics. Good topics: deterministic agent runners, event-driven changelog automation, RAG pipelines for operational context, multi-service Kubernetes networking, GitOps approval workflows.',
+    };
+    // Two how-to posts per week — writer self-selects topic from cluster context, biased toward platform/SRE topics
+    this.jobs.push({ name: 'how-to-wed', contentType: 'how-to', utcDay: 3, utcHour: 18, additionalContext: howToContext });
+    this.jobs.push({ name: 'how-to-sat', contentType: 'how-to', utcDay: 6, utcHour: 18, additionalContext: howToContext });
+    log.info('Registered: how-to — Wednesday + Saturday 18:00 UTC');
   }
 
   private tick(): void {
@@ -62,7 +66,7 @@ export class Scheduler {
       if (this.shouldRun(job, now)) {
         job.lastRun = now;
         log.info(`Running scheduled job: ${job.name}`);
-        this.pipeline.runWithReporting(job.contentType, 'schedule').catch(err => {
+        this.pipeline.runWithReporting(job.contentType, 'schedule', undefined, job.additionalContext ?? {}).catch(err => {
           log.error(`Scheduled job ${job.name} failed:`, err);
         });
       }

@@ -28,6 +28,8 @@ Accuracy checks (MOST IMPORTANT):
 - If the draft attributes a problem to the deploy, verify events are from the same service/namespace
 - If the draft contains ANY fabricated incidents, metrics, or claims not supported by the data, score accuracy as 0
 - A clean deploy described as problematic is a CRITICAL accuracy failure
+- If the draft contains text matching "[Placeholder" patterns (e.g., "[Placeholder: Screenshot of X]"), this is ALWAYS an accuracy error — score 0, approved=false
+- If any code block is explicitly labeled as "pseudocode" or "not production-ready", this is an accuracy error — real posts use real code or no code
 
 Scoring:
 - 90+ = approved, ready to publish as draft
@@ -63,6 +65,15 @@ export class ReviewAgent {
     const start = Date.now();
     log.info(`Reviewing draft: "${draft.title}"`);
 
+    // Fast pre-screen: reject obviously broken drafts before burning LLM tokens
+    const preScreen = this.preScreenDraft(draft);
+    if (preScreen) {
+      log.warn(`Pre-screen rejection for "${draft.title}": ${preScreen.feedback[0]?.message}`);
+      agentCallsTotal.inc({ agent: 'review', status: 'success' });
+      agentDuration.observe({ agent: 'review' }, (Date.now() - start) / 1000);
+      return { result: preScreen, tokensUsed: { input: 0, output: 0 } };
+    }
+
     const userPrompt = this.buildPrompt(draft, context);
 
     try {
@@ -95,6 +106,41 @@ export class ReviewAgent {
       log.error('Review agent failed', err);
       throw err;
     }
+  }
+
+  /**
+   * Fast pre-screen check run before the LLM review.
+   * Returns a ReviewResult immediately if the draft has obviously disqualifying content.
+   * Returns null if the draft passes and should proceed to LLM review.
+   */
+  private preScreenDraft(draft: BlogDraft): ReviewResult | null {
+    // Hard reject: any [Placeholder...] markers indicate incomplete content
+    if (/\[Placeholder[:\s]/i.test(draft.content)) {
+      return {
+        approved: false,
+        score: 0,
+        feedback: [{
+          category: 'accuracy',
+          severity: 'error',
+          message: 'Draft contains [Placeholder] markers — content is incomplete and not ready for publishing',
+          suggestion: 'Remove all placeholder markers and replace with actual content, real screenshots, or omit the section entirely',
+        }],
+      };
+    }
+    // Hard reject: code explicitly labeled as pseudocode or not production-ready
+    if (/pseudocode|illustrative.*not.*production|not.*production.ready/i.test(draft.content)) {
+      return {
+        approved: false,
+        score: 20,
+        feedback: [{
+          category: 'accuracy',
+          severity: 'error',
+          message: 'Draft contains code explicitly labeled as pseudocode or not production-ready',
+          suggestion: 'Replace with real code from the actual implementation, or remove the code block entirely',
+        }],
+      };
+    }
+    return null;
   }
 
   private buildPrompt(draft: BlogDraft, context: ContextAgentOutput): string {

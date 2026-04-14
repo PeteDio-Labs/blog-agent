@@ -223,9 +223,16 @@ Respond with the same JSON format as before — the full revised draft.`;
       parts.push('');
     }
 
+    // Topic bias — explicit guidance for scheduled how-to posts
+    if (context.additionalContext.topicBias) {
+      parts.push(`TOPIC GUIDANCE: ${context.additionalContext.topicBias}`);
+      parts.push('');
+    }
+
     // Other additional context (generic fallback)
     const otherContext = { ...context.additionalContext };
     delete otherContext.projectDocs;
+    delete otherContext.topicBias;
     if (Object.keys(otherContext).length > 0) {
       parts.push('Additional context: ' + JSON.stringify(otherContext));
       parts.push('');

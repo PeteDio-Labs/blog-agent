@@ -69,7 +69,12 @@ export class ContextAgent {
       if (this.ragClient) {
         const ragQuery = this.buildRagQuery(contentType, triggerEvents, additionalContext);
         try {
-          const chunks = await this.ragClient.query({ query: ragQuery, topK: 5, sourceTypes: ['post', 'session'] });
+          // Include 'doc' chunks for content types that benefit from architecture/knowledge context
+          const ragSourceTypes: Array<'post' | 'session' | 'doc'> = ['post', 'session'];
+          if (contentType === 'how-to' || contentType === 'weekly-recap' || contentType === 'docs-audit') {
+            ragSourceTypes.push('doc');
+          }
+          const chunks = await this.ragClient.query({ query: ragQuery, topK: 5, sourceTypes: ragSourceTypes });
           historicalContext = chunks.map(c => ({
             sourceRef: c.sourceRef,
             sourceType: c.sourceType,
