@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 env:
-  REGISTRY: docker.toastedbytes.com
+  REGISTRY: docker.pdlab.dev
   IMAGE_NAME: blog-agent
 
 jobs:
